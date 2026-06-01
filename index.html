@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Визуализатор графа - дерево решений с заметками</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fb;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+        .toolbar {
+            padding: 16px 24px;
+            background: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .file-section {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        label {
+            background: #f1f5f9;
+            padding: 8px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #cbd5e1;
+        }
+        label:hover {
+            background: #e2e8f0;
+        }
+        button {
+            background: #3b82f6;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 40px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #2563eb;
+        }
+        button:hover {
+            background: #2563eb;
+            transform: translateY(-1px);
+        }
+        .reset-btn {
+            background: #64748b;
+            border-color: #475569;
+        }
+        .reset-btn:hover {
+            background: #475569;
+        }
+        .info {
+            font-size: 14px;
+            color: #475569;
+            background: #f8fafc;
+            padding: 6px 12px;
+            border-radius: 30px;
+        }
+        .graph-container {
+            flex: 1;
+            position: relative;
+            background: #ffffff;
+            overflow: auto;
+            min-height: 500px;
+        }
+        svg {
+            display: block;
+            margin: 0;
+            background: #ffffff;
+            cursor: grab;
+        }
+        svg:active {
+            cursor: grabbing;
+        }
+        .node-rect {
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            fill: white;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.05));
+            transition: stroke 0.1s;
+        }
+        .node-text {
+            font-size: 13px;
+            font-weight: 600;
+            fill: #0f172a;
+            dominant-baseline: middle;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+        .link-line {
+            stroke: #94a3b8;
+            stroke-width: 2;
+            fill: none;
+            stroke-dasharray: 4 3;
+            transition: stroke 0.2s;
+        }
+        .link-label {
+            font-size: 11px;
+            fill: #334155;
+            font-weight: 500;
+            background: white;
+            paint-order: stroke;
+            stroke: white;
+            stroke-width: 2px;
+            dominant-baseline: middle;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+        .foreignobject-input {
+            width: 100px;
+            height: 26px;
+            font-size: 11px;
+            border: 1px solid #cbd5e1;
+            border-radius: 20px;
+            padding: 4px 8px;
+            background: #fefefe;
+            transition: 0.1s;
+            font-family: monospace;
+            text-align: center;
+        }
+        .foreignobject-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+        }
+        .node-group {
+            cursor: pointer;
+        }
+        .node-group:hover .node-rect {
+            stroke-width: 3.5;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+        }
+        .toggle-hint {
+            font-size: 9px;
+            fill: #64748b;
+            dominant-baseline: hanging;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+        footer {
+            padding: 8px 20px;
+            font-size: 12px;
+            color: #94a3b8;
+            border-top: 1px solid #e2e8f0;
+            background: #fafcff;
+            text-align: center;
+        }
+        @media (max-width: 700px) {
+            .foreignobject-input { width: 70px; font-size: 9px; }
+            .node-text { font-size: 10px; }
+        }
+    </style>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+<div class="container">
+    <div class="toolbar">
+        <div class="file-section">
+            <label for="fileInput">📂 Загрузить graph.json</label>
+            <input type="file" id="fileInput" accept=".json" style="display: none;">
+            <button id="downloadNotesBtn">💾 Скачать заметки</button>
+            <button id="resetViewBtn" class="reset-btn">🔄 Сбросить вид</button>
+        </div>
+        <div class="info">
+            🔵 Клик по узлу → свернуть/развернуть детей | ✏️ Вводите заметки → автосохранение в localStorage
+        </div>
+    </div>
+    <div class="graph-container" id="graph-container">
+        <svg id="tree-svg" width="100%" height="100%" viewBox="0 0 1200 800"></svg>
+    </div>
+    <footer>✔️ Узлы с одинаковым ID обведены единым цветом (HSL). Дети сворачиваются. Результат кубика указан на
+        ребре.
+    </footer>
+</div>
+
+<script>
+    // ---------- Глобальные переменные ----------
+    let currentRoot = null;          // корневой узел в формате d3.hierarchy (с расширенными данными)
+    let svg = d3.select("#tree-svg");
+    let g = svg.append("g");          // основная группа для zoom/pan
+    let zoomBehavior = null;
+    let container = document.getElementById("graph-container");
+    let treeLayout = null;
+    let nodeWidth = 130;
+    let nodeHeight = 70;
+
+    // ---------- Утилиты: цвет по ID (одинаковый для одинаковых id) ----------
+    function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0; // 32-bit integer
+        }
+        return Math.abs(hash);
+    }
+
+    function getColorForId(id) {
+        const idStr = String(id).split("").reverse().join("");
+        const hue = hashCode(idStr) % 360;
+        return `hsl(${hue}, 70%, 55%)`;
+    }
+
+    function getFillForId(id) {
+        const idStr = String(id);
+        const hue = hashCode(idStr) % 360;
+        return `hsl(${hue}, 70%, 96%)`;
+    }
+
+    // ---------- Преобразование исходного формата в стандартное дерево с массивом children ----------
+    // Исходный формат: узел имеет children: { "1": [...], "2": [...], ... } или пустой объект.
+    // Мы добавляем каждому дочернему узлу свойство rollResult (ключ)
+    function transformNode(node) {
+        if (!node) return null;
+        const newNode = {
+            id: node.id,
+            depth: node.depth,
+            turn: node.turn,
+            uid: node.uid,
+            board: node.board ? JSON.parse(JSON.stringify(node.board)) : null,
+            result: node.result,
+            first_score: node.first_score ?? 0,
+            second_score: node.second_score ?? 0,
+            rollResult: node.rollResult || null,   // для корня нет, для детей придет от родителя
+            children: []   // будет массивом
+        };
+
+        // обрабатываем children: объект с ключами-результатами
+        if (node.children && typeof node.children === 'object' && !Array.isArray(node.children)) {
+            const childrenObj = node.children;
+            for (const [rollKey, childArray] of Object.entries(childrenObj)) {
+                if (Array.isArray(childArray)) {
+                    for (const childNode of childArray) {
+                        const transformedChild = transformNode(childNode);
+                        if (transformedChild) {
+                            transformedChild.rollResult = rollKey;   // сохраняем какой выпал кубик
+                            newNode.children.push(transformedChild);
+                        }
+                    }
+                } else if (childArray && typeof childArray === 'object') {
+                    // иногда может быть один объект (но по структуре массив), но для надёжности
+                    const transformedChild = transformNode(childArray);
+                    if (transformedChild) {
+                        transformedChild.rollResult = rollKey;
+                        newNode.children.push(transformedChild);
+                    }
+                }
+            }
+        }
+        // если children: {} или отсутствует — оставляем пустой массив
+        return newNode;
+    }
+
+    // ---------- Загрузка и построение дерева ----------
+    function loadGraphFromJSON(jsonData) {
+        try {
+            const rawRoot = jsonData;
+            if (!rawRoot.id) throw new Error("Некорректный JSON: отсутствует поле id в корне");
+            const transformedRoot = transformNode(rawRoot);
+            if (!transformedRoot) throw new Error("Ошибка трансформации узлов");
+
+            // Создаём иерархию для d3
+            const root = d3.hierarchy(transformedRoot);
+            // Инициализируем поддержку сворачивания: у каждого узла сохраняем оригинальных детей в _children если нужно
+            // Изначально все развернуты, значит children === массив, _children = null
+            root.eachBefore(node => {
+                if (node.data.children && node.data.children.length > 0) {
+                    node._children = null;   // не свернуты
+                } else {
+                    node._children = null;
+                }
+            });
+
+            currentRoot = root;
+            renderTree(currentRoot);
+            return true;
+        } catch (err) {
+            console.error(err);
+            alert("Ошибка при загрузке/парсинге JSON: " + err.message);
+            return false;
+        }
+    }
+
+    // ---------- Рендеринг дерева (сетка + линии + узлы + input) ----------
+    let currentWidth = 1200, currentHeight = 800;
+
+    function renderTree(root) {
+        if (!root) return;
+
+        // Определяем размеры контейнера
+        const containerRect = container.getBoundingClientRect();
+        const width = Math.max(containerRect.width, 800);
+        const height = Math.max(containerRect.height, 600);
+
+        svg.attr("width", width).attr("height", height);
+
+        // Настройка tree layout (вертикальное: сверху вниз)
+        treeLayout = d3.tree()
+            .nodeSize([nodeHeight + 20, nodeWidth + 35])   // [y, x] т.к. вертикальное
+            .separation((a, b) => (a.parent === b.parent ? 1.2 : 1.5));
+
+        // Вычисляем позиции
+        const treeData = treeLayout(root);
+
+        // Определим границы для viewBox/zoom
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        root.each(node => {
+            minX = Math.min(minX, node.x);
+            maxX = Math.max(maxX, node.x);
+            minY = Math.min(minY, node.y);
+            maxY = Math.max(maxY, node.y);
+        });
+        const padding = 100;
+        const totalWidth = maxX - minX + 2 * padding;
+        const totalHeight = maxY - minY + 2 * padding;
+
+        // Обновляем viewBox SVG, чтобы вместить всё дерево
+        svg.attr("viewBox", `${minX - padding} ${minY - padding} ${totalWidth} ${totalHeight}`);
+
+        // ----- Отрисовка связей (линии с метками результатов кубика) -----
+        const linksGroup = g.selectAll(".links-group").data([null]);
+        linksGroup.join("g").attr("class", "links-group").selectAll(".link-wrapper").remove();
+
+        const linkWrapper = g.select(".links-group")
+            .selectAll(".link-wrapper")
+            .data(root.links())
+            .join("g")
+            .attr("class", "link-wrapper");
+
+        // рисуем линии
+        linkWrapper.append("path")
+            .attr("class", "link-line")
+            .attr("d", d => {
+                // вертикальная кривая: ординальная кривая
+                const sourceX = d.source.x;
+                const sourceY = d.source.y;
+                const targetX = d.target.x;
+                const targetY = d.target.y;
+                const midY = (sourceY + targetY) / 2;
+                return `M ${sourceX} ${sourceY} C ${sourceX} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
+            });
+
+        // добавляем текст с результатом кубика (rollResult) на ребро
+        linkWrapper.append("text")
+            .attr("class", "link-label")
+            .attr("x", d => {
+                const sourceX = d.source.x;
+                const targetX = d.target.x;
+                return (sourceX + targetX) / 2;
+            })
+            .attr("y", d => {
+                const sourceY = d.source.y;
+                const targetY = d.target.y;
+                return (sourceY + targetY) / 2 - 8;
+            })
+            .text(d => {
+                const roll = d.target.data.rollResult;
+                return roll ? `🎲 ${roll}` : "?";
+            });
+
+        // ----- Отрисовка узлов -----
+        const nodesGroup = g.selectAll(".nodes-group").data([null]);
+        nodesGroup.join("g").attr("class", "nodes-group").selectAll(".node-group").remove();
+
+        const nodeGroups = g.select(".nodes-group")
+            .selectAll(".node-group")
+            .data(root.descendants())
+            .join("g")
+            .attr("class", "node-group")
+            .attr("transform", d => `translate(${d.x}, ${d.y})`)
+            .on("click", function(event, d) {
+                // Клик по узлу - сворачивание/разворачивание (но не по input)
+                const targetEl = event.target;
+                if (targetEl && (targetEl.tagName === 'INPUT' || targetEl.closest('input'))) {
+                    event.stopPropagation();
+                    return;
+                }
+                toggleNodeChildren(d);
+            });
+
+        // прямоугольник (обводка цветом по id)
+        nodeGroups.append("rect")
+            .attr("class", "node-rect")
+            .attr("x", -nodeWidth/2)
+            .attr("y", -nodeHeight/2)
+            .attr("width", nodeWidth)
+            .attr("height", nodeHeight)
+            .attr("rx", 14)
+            .attr("ry", 14)
+            .attr("stroke", d => getColorForId(d.data.id))
+            .attr("fill", d => getFillForId(d.data.id))
+
+
+
+        // Текст с ID
+        nodeGroups.append("text")
+            .attr("class", "node-text")
+            .attr("y", -14)
+            .text(d => `ID: ${d.data.id}`)
+            .attr("fill", "#1e293b");
+
+        // дополнительная инфа (результат если есть)
+        nodeGroups.append("text")
+            .attr("class", "toggle-hint")
+            .attr("y", 22)
+            .text(d => (d.children || d._children) ? (d.children ? "▼ свернуть" : "▶ развернуть") : "🍃 лист");
+
+        // ---- Input (foreignObject) для заметок пользователя, сохраняем в localStorage ----
+        nodeGroups.each(function(d) {
+            const group = d3.select(this);
+            const nodeId = d.data.id;
+            // восстанавливаем значение из localStorage
+            const storedValue = localStorage.getItem(`node_note_${nodeId}`) || "";
+
+            const foreign = group.append("foreignObject")
+                .attr("x", -nodeWidth/2 + 8)
+                .attr("y", 0)
+                .attr("width", nodeWidth - 16)
+                .attr("height", 28)
+                .attr("class", "note-foreign");
+
+            const inputEl = foreign.append("xhtml:input")
+                .attr("type", "text")
+                .attr("class", "foreignobject-input")
+                .attr("placeholder", "заметка...")
+                .attr("value", storedValue)
+                .attr('id', d => d.data.id)
+                .style("width", "100%")
+                .style("height", "26px")
+                .style("box-sizing", "border-box")
+                .on("input", function(event) {
+                    const value = event.target.value;
+                    localStorage.setItem(`node_note_${nodeId}`, value);
+                    d3.selectAll(`input[id='${nodeId}']`).property("value", value);
+                })
+                .on("click", (event) => event.stopPropagation());
+
+            inputEl.node().value = storedValue;
+        });
+
+        // показываем/скрываем подсказку о детях
+        nodeGroups.each(function(d) {
+            const hasVisibleChildren = d.children && d.children.length > 0;
+            const hasHiddenChildren = d._children && d._children.length > 0;
+            if (!hasVisibleChildren && !hasHiddenChildren) {
+                // лист — можно убрать подсказку или оставить "лист"
+            }
+        });
+    }
+
+    // Функция сворачивания/разворачивания узла (изменяет структуру и перерисовывает)
+    function toggleNodeChildren(node) {
+        if (!node) return;
+        // если есть видимые дети -> сворачиваем
+        if (node.children && node.children.length > 0) {
+            node._children = node.children;
+            node.children = null;
+        }
+        // иначе если есть свернутые -> разворачиваем
+        else if (node._children && node._children.length > 0) {
+            node.children = node._children;
+            node._children = null;
+        } else {
+            return; // нет детей
+        }
+        // перерисовываем дерево с новыми данными
+        renderTree(currentRoot);
+    }
+
+    // ---------- Инициализация zoom + pan ----------
+    function initZoom() {
+        zoomBehavior = d3.zoom()
+            .on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            });
+        svg.call(zoomBehavior);
+        // начальное центрирование (можно позже)
+        setTimeout(() => {
+            svg.call(zoomBehavior.transform, d3.zoomIdentity.translate(100, 100).scale(0.8));
+        }, 100);
+    }
+
+    function resetZoom() {
+        if (!zoomBehavior) return;
+        svg.transition().duration(500).call(zoomBehavior.transform, d3.zoomIdentity);
+    }
+
+    // ---------- Скачивание заметок (все из localStorage по префиксу node_note_) ----------
+    function downloadNotes() {
+        const notesMap = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith("node_note_")) {
+                const nodeId = key.replace("node_note_", "");
+                const noteValue = localStorage.getItem(key);
+                if (noteValue && noteValue.trim() !== "") {
+                    notesMap[nodeId] = noteValue;
+                } else {
+                    // пустые строки тоже можно, но для чистоты пропустим или запишем пустую
+                    notesMap[nodeId] = noteValue;
+                }
+            }
+        }
+        const blob = new Blob([JSON.stringify(notesMap, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "graph_notes.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // ---------- Обработчик загрузки файла ----------
+    function handleFileUpload(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                loadGraphFromJSON(json);
+            } catch (err) {
+                alert("Ошибка парсинга JSON: " + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // ---------- Сброс локального хранилища для текущего дерева (опционально, но не требуется) ----------
+    // для удобства добавим кнопку "Очистить заметки по дереву"? не обязательно.
+    // Но по заданию только скачать, удалять не просили.
+
+    // ---------- Инициализация UI ----------
+    function setupEventListeners() {
+        const fileInput = document.getElementById("fileInput");
+        const fileLabel = document.querySelector("label[for='fileInput']");
+        fileLabel.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", (e) => {
+            if (e.target.files.length) handleFileUpload(e.target.files[0]);
+        });
+
+        const downloadBtn = document.getElementById("downloadNotesBtn");
+        downloadBtn.addEventListener("click", downloadNotes);
+
+        const resetBtn = document.getElementById("resetViewBtn");
+        resetBtn.addEventListener("click", resetZoom);
+    }
+
+    // Пример данных для демонстрации (если пользователь не загрузил файл, показываем пример из сообщения)
+    // Чтобы не было пустого экрана, загрузим дефолтный граф (из сообщения, но обрезанный? использовать тот же, но без хардкода?)
+    // По условию "этот файл я загружу сам, не нужно его хардкодить" — значит начальное состояние без графа, либо пустое.
+    // Покажем сообщение, что нужно загрузить файл.
+    function showEmptyMessage() {
+        const msg = `<text x="50%" y="50%" text-anchor="middle" font-size="16" fill="#94a3b8">Загрузите graph.json через кнопку сверху</text>`;
+        g.html(""); // очистим
+        g.append("text").attr("x", "50%").attr("y", "50%").attr("text-anchor", "middle").attr("fill", "#94a3b8").style("font-size", "18px").text("📁 Загрузите JSON-файл с деревом");
+    }
+
+    // Подготовка
+    initZoom();
+    setupEventListeners();
+    showEmptyMessage();
+
+    // Обновление размеров окна -> перерисовка с сохранением данных
+    window.addEventListener("resize", () => {
+        if (currentRoot) {
+            renderTree(currentRoot);
+        }
+    });
+
+    // экспорт функций в консоль для дебага не требуется
+    console.log("Готово. Загрузите ваш graph.json с поддержкой children-объекта. ID узлов будут выделены цветом.");
+
+    // Дополнительно: обработчик для демо, но не хардкодим.
+    // Если нужен тестовый пример — оставим, но по заданию файл загружает пользователь.
+    // Для удобства можно добавить drag & drop область.
+    // Реализуем drag & drop для контейнера.
+    const graphContainer = document.getElementById("graph-container");
+    graphContainer.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        graphContainer.classList.add("drag-over");
+    });
+    graphContainer.addEventListener("dragleave", () => {
+        graphContainer.classList.remove("drag-over");
+    });
+    graphContainer.addEventListener("drop", (e) => {
+        e.preventDefault();
+        graphContainer.classList.remove("drag-over");
+        const files = e.dataTransfer.files;
+        if (files.length > 0) handleFileUpload(files[0]);
+    });
+
+    // стиль для drag-over
+    const style = document.createElement("style");
+    style.textContent = `.drag-over { background: #eef2ff; outline: 2px dashed #3b82f6; }`;
+    document.head.appendChild(style);
+</script>
+</body>
+</html>
